@@ -1,9 +1,12 @@
 const { Client } = require('whatsapp-web.js');
 const express = require('express');
+const { body, validationResult } = require('express-validator');
 const socketIO = require('socket.io');
 const qrcode = require('qrcode');
 const http = require('http');
 const fs = require('fs');
+const { phoneNumberFormatter } = require('./utils/formatter')
+const port = process.env.PORT || 8000;
 
 const app = express();
 const server = http.createServer(app);
@@ -19,27 +22,76 @@ if (fs.existsSync(SESSION_FILE_PATH)) {
 }
 
 app.get('/', (req, res) => {
-    res.sendFile('index.html', { root: __dirname });
+    res.sendFile('index.html', { 
+        root: __dirname 
+    });
 })
 
-app.post('/sendMessage', (req, res) => {
-    const number = req.body.number;
+const client = new Client({ 
+    puppeteer: { 
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process', // <- this one doesn't works in Windows
+            '--disable-gpu'
+        ],
+        headless: true 
+    }, 
+    session: sessionCfg 
+});
+
+const checkRegisteredNumber = (number) => {
+    const isRegistered = client.isRegisteredUser(number);
+
+    return isRegistered;
+}
+
+app.post('/sendMessage', [
+    body('number').notEmpty(),
+    body('message').notEmpty(),
+] ,(req, res) => {
+    const errors = validationResult(req).formatWith(({
+        msg
+    }) => {
+        return msg;
+    });
+
+    if(!errors.isEmpty()){
+        return res.status(422).json({
+            success: false,
+            message: errors.mapped()
+        })
+    }
+
+    const number = phoneNumberFormatter(req.body.number);
     const message = req.body.message;
+
+    const isRegisteredNumber = checkRegisteredNumber(number)
+
+    if(!isRegisteredNumber){
+        return res.status(422).json({
+            success: false,
+            message: 'Number not registered'
+        })
+    }
 
     client.sendMessage(number, message).then(response => {
         res.status(201).json({
-            'success': true,
-            'message': response
+            success: true,
+            message: response
         })
-    }).catch(err => {
+    }).catch(error => {
         res.status(500).json({
-            'success': false,
-            'message': err
+            success: false,
+            message: error
         })
     }); 
 });
 
-const client = new Client({ puppeteer: { headless: true }, session: sessionCfg });
 
 client.on('message', msg => {
     if (msg.body == '!ping') {
@@ -82,6 +134,6 @@ io.on('connection', (socket) => {
     
 })
 
-server.listen(8081, () => {
-    console.log('App Running On port 8081');
+server.listen(port, () => {
+    console.log('App Running On port ' + port);
 })
