@@ -9,7 +9,6 @@ const fileupload = require('express-fileupload');
 const axios = require('axios')
 
 const { phoneNumberFormatter } = require('./utils/formatter');
-const { response } = require('express');
 const port = process.env.PORT || 8000;
 
 const app = express();
@@ -17,7 +16,9 @@ const server = http.createServer(app);
 const io = socketIO(server);
 
 app.use(express.json());
-app.use(express.urlencoded({ extended:true }));
+app.use(express.urlencoded({ 
+    extended:true
+ }));
 app.use(fileupload({
     debug: true
 }))
@@ -53,7 +54,7 @@ const checkRegisteredNumber = async (number) => {
 }
 
 app.get('/', (req, res) => {
-    res.sendFile('index.html', { 
+    res.sendFile('home.html', { 
         root: __dirname 
     });
 })
